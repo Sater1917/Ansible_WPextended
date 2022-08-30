@@ -1,0 +1,195 @@
+##################################################
+# Wordpress
+##################################################
+---
+- hosts: all
+  collections:
+   - community.mysql
+   - community.general
+  become: true
+  vars_files:
+    - vars/default.yml
+
+# Check server status - must be answer
+  tasks:
+    - action: ping
+
+    - name: Install Prerequisites
+      apt: name={{ item }} update_cache=yes state=latest force_apt_get=yes
+      loop: [ 'aptitude' ]
+
+    - name: Install NGINX+Latest MySQL Packages
+      apt: name={{ item }} update_cache=yes state=latest
+      loop: [ 'nginx', 'mysql-server', 'mysql-client', 'python3-pymysql', 'mc', 'snapd']
+
+#create document root
+    - name: Create document root
+      file:
+        path: "/var/www/{{ http_host }}"
+        state: directory
+        owner: "www-data"
+        group: "www-data"
+        mode: '0755'
+
+# security 1 block
+    -  name: Disable SSH password authentication
+       lineinfile:
+         path: "/etc/ssh/sshd_config"
+         regex: "^(#)?{{item.key}}"
+         line: "{{item.key}} {{item.value}}"
+         state: present
+       loop:
+         - { key: "PasswordAuthentication", value: "no" } 
+       notify: restart sshd
+
+    - name: Set authorized key for user ROOT for developer
+      authorized_key:
+        user: root
+        state: present
+        key: "{{ sshkey }}"
+
+
+    - name: Setup alternate SSH port
+      lineinfile:
+        dest: "/etc/ssh/sshd_config"
+        regexp: "^Port"
+        line: "Port 1234"
+      notify: restart sshd
+
+    - name: Setup SSH IP whitelist
+      lineinfile:
+        dest: "/etc/ssh/sshd_config"
+        line: "{{ secureIP }}"
+        state: present 
+      notify: restart sshd
+
+
+
+    
+# Nginx Configuration
+    - name: Sets Nginx conf file
+      template:
+        src: "files/nginx.conf.j2"
+        dest: "/etc/nginx/sites-available/{{ http_conf }}"
+
+    - name: Enables new site
+      file:
+        src: "/etc/nginx/sites-available/{{ http_conf }}"
+        dest: "/etc/nginx/sites-enabled/{{ http_conf }}"
+        state: link
+      notify: Reload Nginx
+
+    - name: Sets .htpasswd
+      template:
+        src: "files/pass.j2"
+        dest: "/etc/nginx/.htpasswd"
+
+
+#Backups
+    - name: Create backup folder
+      file:
+        path: "/backup"
+        state: directory
+        owner: "root"
+        group: "root"
+        mode: '0755'
+
+    - name: Sets backup.sh
+      template:
+        src: "files/backup.sh.j2"
+        dest: "/backup/backup.sh"
+
+    - name: Make backup executable
+      file: 
+        path: "/backup/backup.sh"
+        mode: '0755'
+
+    - name: Sets CRON for backup
+      template:
+        src: "files/back.j2"
+        dest: "/etc/cron.d/back"
+
+
+
+
+# PHP 8.1  Install
+    - name: Add PHP PPA repository
+      become: true
+      apt_repository:
+        repo: 'ppa:ondrej/php'
+
+
+    - name: Install PHP Phase 1
+      apt: name={{ item }} update_cache=yes state=latest
+      loop: [ 'php8.1', 'php8.1-common','php8.1-gmp',' php8.1-curl', 'php8.1-soap',' php8.1-bcmath','php8.1-intl','php8.1-mbstring',' php8.1-xmlrpc']
+
+    - name: Install PHP Phase 2
+      apt: name={{ item }} update_cache=yes state=latest
+      loop: [ 'php8.1-mcrypt','php8.1-mysql','php8.1-gd','php8.1-xml','php8.1-cli','php8.1-zip','php8.1-fpm' ]
+
+
+# MySQL Configuration
+    - name: Create WP database 
+      community.mysql.mysql_db:
+        name: "{{ mysql_db }}"
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Create db_user with password  
+      community.mysql.mysql_user: 
+        name: "{{ mysql_user }}" 
+        password: "{{ mysql_password }}"
+        priv: "{{ mysql_db }}.*:ALL"
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+
+    - name: Download and unpack  Wordpress
+      ansible.builtin.unarchive:
+        src: https://wordpress.org/latest.tar.gz
+        dest: /var/www/{{ http_host }}
+        remote_src: yes
+        owner: "www-data"
+        group: "www-data"
+        mode: '0777'
+
+#Certot block
+    - name: Install snap core
+      community.general.snap:
+        name:
+          - core
+
+    - name: Install CertBot  with option --classic
+      community.general.snap:
+        name: certbot
+        classic: yes
+    
+    - name: check Certbot old version
+      stat:
+        path: /usr/bin/certbot
+      register: certbot_inst
+
+    - name: Certbot placement
+      command: bash -lc "ln -s /snap/bin/certbot /usr/bin/certbot"
+      when: not certbot_inst
+
+    - name: Certbot run
+      command: bash -lc "certbot --nginx --non-interactive --agree-tos --domains {{ http_host }} --email tertichnij@gmail.com"
+      notify: Restart Nginx
+
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
+
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted
+
+    - name: restart sshd
+      service:
+        name: ssh
+        state: restarted

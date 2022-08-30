@@ -1,0 +1,8 @@
+---
+mysql_user: "username"
+mysql_password: "password"
+mysql_db: "wordpress"
+http_host: "testwp.interactivated.me"
+http_conf: "WP.conf"
+sshkey: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCyiRJrSBbq7k52gUvb0lAV/QHEM7SVosh8r5/e/H0XLzvE7y7Y7UG5yY77N7eiPS1VuKScdXJJBJ5O2cF9XlHwWmK71F7rKVMBB9cEAbxw4Xnu0ZWZaLO19iCk/STEuTx0bWfKPFBFjdFtdHRnKq/F6AipAVzi855FUkbRJz2Ad1RIjUS7es3uzqF+A9tagdlE3oXHUVLKj1FJM00sHxdkrEpYj1T3HcWofHxBwXoaGLHFrD1ew0RYk3AFPT3DF2J8RF/B7iGgoa1f9uMR46Mk4zyf0sn3Bt6n3L+T+WvZefTNTVdWpw3MK2HUH/rhJt7TDd6TtWD/OXmA1o6AxKhX test@B580"
+secureIP: "AllowUsers *@65.108.52.8 *@31.202.175.251 "

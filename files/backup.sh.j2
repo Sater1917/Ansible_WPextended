@@ -1,0 +1,4 @@
+#!/bin/bash
+cd /backup
+mysqldump  {{ mysql_db }} | gzip > `date +backup.%Y%m%d.sql.gz`
+find /backup/ -name "*.gz" -mtime +30 -exec rm -f {} \;
